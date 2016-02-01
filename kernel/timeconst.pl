@@ -375,4 +375,4 @@ if ($hz eq '--can') {
 	}
 	output($hz, @val);
 }
-exit 0;
+exit 0; 
