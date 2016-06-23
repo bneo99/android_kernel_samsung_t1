@@ -599,13 +599,13 @@ extern void *_bcmutils_dummy_fn;
 
 #ifndef setbit
 #ifndef NBBY
-#define	NBBY	8	
-#endif 
+#define	NBBY	8
+#endif
 #define	setbit(a, i)	(((uint8 *)a)[(i) / NBBY] |= 1 << ((i) % NBBY))
 #define	clrbit(a, i)	(((uint8 *)a)[(i) / NBBY] &= ~(1 << ((i) % NBBY)))
 #define	isset(a, i)	(((const uint8 *)a)[(i) / NBBY] & (1 << ((i) % NBBY)))
 #define	isclr(a, i)	((((const uint8 *)a)[(i) / NBBY] & (1 << ((i) % NBBY))) == 0)
-#endif 
+#endif
 
 #define	NBITS(type)	(sizeof(type) * 8)
 #define NBITVAL(nbits)	(1 << (nbits))
@@ -635,12 +635,12 @@ extern void *_bcmutils_dummy_fn;
 #define MODSUB_POW2(x, y, bound) (((x) - (y)) & ((bound) - 1))
 
 
-#define CRC8_INIT_VALUE  0xff		
-#define CRC8_GOOD_VALUE  0x9f		
-#define CRC16_INIT_VALUE 0xffff		
-#define CRC16_GOOD_VALUE 0xf0b8		
-#define CRC32_INIT_VALUE 0xffffffff	
-#define CRC32_GOOD_VALUE 0xdebb20e3	
+#define CRC8_INIT_VALUE  0xff
+#define CRC8_GOOD_VALUE  0x9f
+#define CRC16_INIT_VALUE 0xffff
+#define CRC16_GOOD_VALUE 0xf0b8
+#define CRC32_INIT_VALUE 0xffffffff
+#define CRC32_GOOD_VALUE 0xdebb20e3
 
 
 #define MACF				"%02x:%02x:%02x:%02x:%02x:%02x"

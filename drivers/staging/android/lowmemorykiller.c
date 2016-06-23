@@ -28,9 +28,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * This is Modified by Samsung Electronics
- * Taewan Kim <taewan95.kim@samsung.com>
- *
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -43,10 +40,6 @@
 #include <linux/swap.h>
 #include <linux/rcupdate.h>
 #include <linux/notifier.h>
-
-#ifdef CONFIG_ENHANCED_LMK_ROUTINE
-#define LOWMEM_DEATHPENDING_DEPTH 3
-#endif
 
 static uint32_t lowmem_debug_level = 1;
 static int lowmem_adj[6] = {
@@ -75,31 +68,16 @@ static unsigned long lowmem_deathpending_timeout;
 static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 {
 	struct task_struct *tsk;
-#ifdef CONFIG_ENHANCED_LMK_ROUTINE
-	struct task_struct *selected[LOWMEM_DEATHPENDING_DEPTH] = {NULL,};
-#else
 	struct task_struct *selected = NULL;
-#endif
 	int rem = 0;
 	int tasksize;
 	int i;
 	int min_score_adj = OOM_SCORE_ADJ_MAX + 1;
 	int minfree = 0;
-#ifdef CONFIG_ENHANCED_LMK_ROUTINE
-	int selected_tasksize[LOWMEM_DEATHPENDING_DEPTH] = {0,};
-	int selected_oom_score_adj[LOWMEM_DEATHPENDING_DEPTH] = {OOM_ADJUST_MAX,};
-	int all_selected_oom = 0;
-#else
 	int selected_tasksize = 0;
 	int selected_oom_score_adj;
-#endif
 	int array_size = ARRAY_SIZE(lowmem_adj);
-#ifndef CONFIG_CMA
 	int other_free = global_page_state(NR_FREE_PAGES) - totalreserve_pages;
-#else
-	int other_free = global_page_state(NR_FREE_PAGES) -
-					global_page_state(NR_FREE_CMA_PAGES) - totalreserve_pages;
-#endif
 	int other_file = global_page_state(NR_FILE_PAGES) -
 						global_page_state(NR_SHMEM);
 
@@ -127,13 +105,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			     sc->nr_to_scan, sc->gfp_mask, rem);
 		return rem;
 	}
-
-#ifdef CONFIG_ENHANCED_LMK_ROUTINE
-	for (i = 0; i < LOWMEM_DEATHPENDING_DEPTH; i++)
-		selected_oom_score_adj[i] = min_score_adj;
-#else
 	selected_oom_score_adj = min_score_adj;
-#endif
 
 	rcu_read_lock();
 	for_each_process(tsk) {
@@ -162,31 +134,6 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		task_unlock(p);
 		if (tasksize <= 0)
 			continue;
-
-#ifdef CONFIG_ENHANCED_LMK_ROUTINE
-		for (i = 0; i < LOWMEM_DEATHPENDING_DEPTH; i++) {
-			if (all_selected_oom >= LOWMEM_DEATHPENDING_DEPTH) {
-				if (oom_score_adj < selected_oom_score_adj[i])
-					continue;
-				if (oom_score_adj == selected_oom_score_adj[i] &&
-					tasksize <= selected_tasksize[i])
-					continue;
-			} else if (selected[i])
-				continue;
-
-			selected[i] = p;
-			selected_tasksize[i] = tasksize;
-			selected_oom_score_adj[i] = oom_score_adj;
-
-			if (all_selected_oom < LOWMEM_DEATHPENDING_DEPTH)
-				all_selected_oom++;
-			lowmem_print(2, "select '%s' (%d), adj %d, size %d,"
-			     "to kill\n",
-			     p->comm, p->pid, oom_score_adj, tasksize);
-
-			break;
-		}
-#else
 		if (selected) {
 			if (oom_score_adj < selected_oom_score_adj)
 				continue;
@@ -199,32 +146,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		selected_oom_score_adj = oom_score_adj;
 		lowmem_print(2, "select '%s' (%d), adj %d, size %d, to kill\n",
 			     p->comm, p->pid, oom_score_adj, tasksize);
-
-#endif
 	}
-
-#ifdef CONFIG_ENHANCED_LMK_ROUTINE
-	for (i = 0; i < LOWMEM_DEATHPENDING_DEPTH; i++) {
-		if (selected[i]) {
-			lowmem_print(1, "Killing '%s' (%d), adj %d,\n" \
-				"   to free %ldkB on behalf of '%s' (%d) because\n" \
-				"   cache %ldkB is below limit %ldkB for oom_score_adj %d\n" \
-				"   Free memory is %ldkB above reserved\n",
-				selected[i]->comm, selected[i]->pid,
-				selected_oom_score_adj[i],
-				selected_tasksize[i] * (long)(PAGE_SIZE / 1024),
-				current->comm, current->pid,
-				other_file * (long)(PAGE_SIZE / 1024),
-				minfree * (long)(PAGE_SIZE / 1024),
-				min_score_adj,
-				other_free * (long)(PAGE_SIZE / 1024));
-			lowmem_deathpending_timeout = jiffies + HZ;
-			send_sig(SIGKILL, selected[i], 0);
-			set_tsk_thread_flag(selected[i], TIF_MEMDIE);
-			rem -= selected_tasksize[i];
-		}
-	}
-#else
 	if (selected) {
 		lowmem_print(1, "Killing '%s' (%d), adj %d,\n" \
 				"   to free %ldkB on behalf of '%s' (%d) because\n" \
@@ -243,7 +165,6 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		set_tsk_thread_flag(selected, TIF_MEMDIE);
 		rem -= selected_tasksize;
 	}
-#endif
 	lowmem_print(4, "lowmem_shrink %lu, %x, return %d\n",
 		     sc->nr_to_scan, sc->gfp_mask, rem);
 	rcu_read_unlock();
@@ -348,7 +269,7 @@ module_param_named(cost, lowmem_shrinker.seeks, int, S_IRUGO | S_IWUSR);
 __module_param_call(MODULE_PARAM_PREFIX, adj,
 		    &lowmem_adj_array_ops,
 		    .arr = &__param_arr_adj,
-		    0, S_IRUGO | S_IWUSR);
+		    S_IRUGO | S_IWUSR, 0664);
 __MODULE_PARM_TYPE(adj, "array of int");
 #else
 module_param_array_named(adj, lowmem_adj, int, &lowmem_adj_size,
